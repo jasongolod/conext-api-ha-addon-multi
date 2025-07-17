@@ -124,7 +124,7 @@ for name, gw in gateways_config.items():
 if not gateways:
     logger.warning("No valid gateways configured")
 
-# Updated get_modbus_values with error handling (unchanged)
+# Updated get_modbus_values with error handling (unchanged from before)
 def get_modbus_values(gateway, device, device_instance=None):
     if gateway not in gateways:
         return {'error': 'Gateway not found'}
