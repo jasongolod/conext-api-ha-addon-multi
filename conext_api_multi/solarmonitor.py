@@ -76,6 +76,9 @@ solar_association = {
     2: 'Solar 2',
 }
 
+# Global gateways dict
+gateways = {}
+
 # Load config.json
 config_path = '/app/config.json'
 gateways_config = []
@@ -110,7 +113,6 @@ else:
     gateways_config = []
 
 # Build gateways dict
-gateways = {}  # Initialize after loading config
 for idx, gw in enumerate(gateways_config):
     try:
         name = gw['name']
@@ -131,6 +133,8 @@ for idx, gw in enumerate(gateways_config):
         logger.error(f"Type error in gateway config at index {idx}: {str(e)} - skipping")
 if not gateways:
     logger.warning("No valid gateways configured")
+else:
+    logger.info(f"Loaded gateways: {list(gateways.keys())}")
 
 def get_modbus_values(gateway, device, device_instance=None):
     logger.info(f"Querying {gateway}/{device}/{device_instance}")
@@ -258,7 +262,7 @@ class CC(Resource):
 
 class Index(Resource):
     def get(self):
-        logger.info("Root endpoint accessed")
+        logger.info(f"Root endpoint accessed, gateways: {list(gateways.keys())}")
         return {"message": "Solar monitor API", "gateways": list(gateways.keys())}, 200
 
 # Updated routes
