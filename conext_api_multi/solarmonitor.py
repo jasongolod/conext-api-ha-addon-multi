@@ -76,7 +76,7 @@ solar_association = {
     2: 'Solar 2',
 }
 
-# Load config.json with robust type checking
+# Load config.json with type check
 config_path = '/app/config.json'
 gateways = {}
 gateways_config = []
@@ -84,7 +84,7 @@ if os.path.exists(config_path):
     with open(config_path, 'r') as f:
         try:
             gateways_config = json.load(f)
-            logger.info(f"Raw config content: {gateways_config}")  # Log raw before json.dumps
+            logger.info(f"Raw config content: {gateways_config}")
             logger.info(f"Config loaded as type: {type(gateways_config)}")
             if isinstance(gateways_config, dict):
                 logger.info("Config is dict; converting to list of values")
@@ -104,7 +104,7 @@ else:
     logger.warning("Config file not found; using empty list")
     gateways_config = []
 
-# Build gateways dict with skipping invalid
+# Build gateways dict
 for idx, gw in enumerate(gateways_config):
     try:
         name = gw['name']
@@ -127,8 +127,9 @@ if not gateways:
     logger.warning("No valid gateways configured")
 
 def get_modbus_values(gateway, device, device_instance=None):
+    logger.info(f"Querying {gateway}/{device}/{device_instance}")
     if gateway not in gateways:
-        return {'error': 'Gateway not found'}
+        return {'error': f'Gateway {gateway} not found'}
     gw_config = gateways[gateway]
     host = gw_config['ip']
     port = gw_config['port']
@@ -180,7 +181,6 @@ def get_modbus_values(gateway, device, device_instance=None):
                 else:
                     converted_value = hold_reg_arr[0]
 
-                # Scaling/parsing
                 if device == "battery":
                     if register == 70:
                         converted_value /= extra
