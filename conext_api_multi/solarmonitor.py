@@ -46,6 +46,26 @@ registers_data = {
         'daily_kwh': '90,1,10',
         'aux_status': '92,1,0',
         'association': '249,1,0'
+    },
+    'ags': {
+        'state': '64,1,0',
+        'faults': '68,1,0',
+        'warnings': '69,1,0',
+        'gen_state': '70,1,0',
+        'start_mode': '72,1,0'
+    },
+    'scp': {
+        'state': '64,1,0',
+        'faults': '68,1,0',
+        'warnings': '69,1,0',
+        'display_status': '70,1,0'
+    },
+    'gridtie': {
+        'state': '64,1,0',
+        'faults': '68,1,0',
+        'warnings': '69,1,0',
+        'pv_volts': '76,1,10',
+        'pv_power': '88,1,10'
     }
 }
 
@@ -74,6 +94,22 @@ solar_association = {
     0: 'Not Associated',
     1: 'Solar 1',
     2: 'Solar 2',
+}
+
+ags_state = {
+    0: 'Stopped',
+    1: 'Running',
+    2: 'Fault'
+}
+
+scp_status = {
+    0: 'Idle',
+    1: 'Active'
+}
+
+gridtie_status = {
+    0: 'Idle',
+    1: 'Producing'
 }
 
 # Global gateways dict
@@ -120,6 +156,9 @@ for idx, gw in enumerate(gateways_config):
             'battery': {d['name']: d['unit_id'] for d in gw.get('batteries', []) if isinstance(d, dict)},
             'inverter': {d['name']: d['unit_id'] for d in gw.get('inverters', []) if isinstance(d, dict)},
             'cc': {d['name']: d['unit_id'] for d in gw.get('charge_controllers', []) if isinstance(d, dict)},
+            'ags': {d['name']: d['unit_id'] for d in gw.get('ags', []) if isinstance(d, dict)},
+            'scp': {d['name']: d['unit_id'] for d in gw.get('scp', []) if isinstance(d, dict)},
+            'gridtie': {d['name']: d['unit_id'] for d in gw.get('gridtie', []) if isinstance(d, dict)}
         }
         gateways[name] = {
             'ip': gw['ip'],
@@ -231,6 +270,36 @@ def get_modbus_values(gateway, device, device_instance=None):
                     else:
                         converted_value = converted_value
 
+                if device == "ags":
+                    if register == 64:
+                        converted_value = operating_state.get(converted_value, 'Unknown')
+                    elif register == 70:
+                        converted_value = ags_state.get(converted_value, 'Unknown')
+                    elif register in [68, 69, 72]:
+                        converted_value = converted_value
+                    else:
+                        converted_value = converted_value
+
+                if device == "scp":
+                    if register == 64:
+                        converted_value = operating_state.get(converted_value, 'Unknown')
+                    elif register == 70:
+                        converted_value = scp_status.get(converted_value, 'Unknown')
+                    elif register in [68, 69]:
+                        converted_value = converted_value
+                    else:
+                        converted_value = converted_value
+
+                if device == "gridtie":
+                    if register == 64:
+                        converted_value = operating_state.get(converted_value, 'Unknown')
+                    elif register in [76, 88]:
+                        converted_value /= extra
+                    elif register in [68, 69]:
+                        converted_value = converted_value
+                    else:
+                        converted_value = converted_value
+
                 return_data[device_key][register_name] = converted_value
             except Exception as e:
                 logger.error(f"Error querying {gateway}/{device}/{device_key}/{register_name}: {str(e)}")
@@ -260,6 +329,30 @@ class CC(Resource):
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
+class AGS(Resource):
+    def get(self, gateway, instance=None):
+        data = get_modbus_values(gateway, "ags", instance)
+        return data, 200 if data else ({"error": "No data returned"}, 404)
+
+    def put(self, gateway, instance):
+        return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
+
+class SCP(Resource):
+    def get(self, gateway, instance=None):
+        data = get_modbus_values(gateway, "scp", instance)
+        return data, 200 if data else ({"error": "No data returned"}, 404)
+
+    def put(self, gateway, instance):
+        return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
+
+class GridTie(Resource):
+    def get(self, gateway, instance=None):
+        data = get_modbus_values(gateway, "gridtie", instance)
+        return data, 200 if data else ({"error": "No data returned"}, 404)
+
+    def put(self, gateway, instance):
+        return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
+
 class Index(Resource):
     def get(self):
         logger.info(f"Root endpoint accessed, gateways: {list(gateways.keys())}")
@@ -269,6 +362,9 @@ class Index(Resource):
 api.add_resource(Battery, "/<string:gateway>/battery", "/<string:gateway>/battery/<string:instance>")
 api.add_resource(Inverter, "/<string:gateway>/inverter", "/<string:gateway>/inverter/<string:instance>")
 api.add_resource(CC, "/<string:gateway>/cc", "/<string:gateway>/cc/<string:instance>")
+api.add_resource(AGS, "/<string:gateway>/ags", "/<string:gateway>/ags/<string:instance>")
+api.add_resource(SCP, "/<string:gateway>/scp", "/<string:gateway>/scp/<string:instance>")
+api.add_resource(GridTie, "/<string:gateway>/gridtie", "/<string:gateway>/gridtie/<string:instance>")
 api.add_resource(Index, "/")
 
 if __name__ == "__main__":
