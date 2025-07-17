@@ -1,9 +1,10 @@
-#!/bin/sh
+#!/usr/bin/with-contenv bashio
 
-# For local testing: config.json is mounted directly, no HA bashio needed
+# Generate config.json from add-on options
+bashio::config 'gateways' | jq > /app/config.json
 
-# Start NGINX in background
-nginx &
+# Start NGINX
+nginx
 
-# Start the Flask app
-python3 /app/solarmonitor.py
+# Start the Flask app with gunicorn
+gunicorn -b 0.0.0.0:5000 -w 4 solarmonitor:app
