@@ -265,9 +265,13 @@ class Index(Resource):
 
 # Updated routes with <gateway>
 api.add_resource(Battery, "/<string:gateway>/battery", "/<string:gateway>/battery/<string:instance>")
+logger.info("Battery route loaded")
 api.add_resource(Inverter, "/<string:gateway>/inverter", "/<string:gateway>/inverter/<string:instance>")
+logger.info("Inverter route loaded")
 api.add_resource(CC, "/<string:gateway>/cc", "/<string:gateway>/cc/<string:instance>")
+logger.info("CC route loaded")
 api.add_resource(Index, "/")
+logger.info("Index route loaded")
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=False)
