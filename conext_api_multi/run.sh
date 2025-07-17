@@ -1,7 +1,7 @@
 #!/usr/bin/with-contenv bashio
 
 echo "Starting run.sh - Generating config.json"
-# Try to fetch gateways config
+# Log raw bashio output
 bashio::config 'gateways' > /app/raw_config.json 2>/app/config_error.log || {
     echo "Error fetching bashio config, see /app/config_error.log"
     cat /app/config_error.log
