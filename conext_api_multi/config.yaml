@@ -16,11 +16,4 @@ ports:
 ports_description:
   80/tcp: "API web server port"
 options:
-  gateways:
-    - name: "gateway1"
-      ip: "192.168.10.106"
-      port: 503
-      timeout: 5
-      batteries: []
-      inverters: []
-      charge_controllers: []
+  gateways: []
