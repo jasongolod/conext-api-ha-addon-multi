@@ -16,4 +16,6 @@ ports:
 ports_description:
   80/tcp: "API web server port"
 options:
-  config: ""
+  gateways: []
+schema:
+  gateways: list(object)?
