@@ -87,6 +87,7 @@ solar_association = {
 # Load config.json with type check and conversion for HA list schemas
 config_path = '/app/config.json'
 gateways = {}
+gateways_config = []
 if os.path.exists(config_path):
     with open(config_path, 'r') as f:
         try:
@@ -175,53 +176,53 @@ def get_modbus_values(gateway, device, device_instance=None):
                         if a > 0:
                             hex_string = hex(a)[2:]
                             if hex_string.endswith("00"):
-                                hex_string = hex_string[:len(hex_string) - 2)
+                                hex_string = hex_string[:len(hex_string) - 2]
                             bytes_object = bytes.fromhex(hex_string)
                             string_chars += bytes_object.decode("ASCII")
                     converted_value = string_chars
                 else:
                     converted_value = hold_reg_arr[0]
 
-                # Scaling/parsing unchanged
-                if device == "battery":
-                    if register == "70":
-                        converted_value /= int(extra)
-                    elif register == "74":
-                        converted_value = converted_value * 0.01 + int(extra)
-                    elif register in ["76","88"]:
-                        converted_value = converted_value
-                    else:
-                        converted_value = converted_value
+                    # Scaling/parsing unchanged
+                    if device == "battery":
+                        if register == "70":
+                            converted_value /= int(extra)
+                        elif register == "74":
+                            converted_value = converted_value * 0.01 + int(extra)
+                        elif register in ["76","88"]:
+                            converted_value = converted_value
+                        else:
+                            converted_value = converted_value
 
-                if device == "inverter":
-                    if register == "64":
-                        converted_value = operating_state.get(converted_value, 'Unknown')
-                    elif register == "122":
-                        converted_value = inverter_status.get(converted_value, 'Unknown')
-                    elif register in ["120","132","154","170","172"]:
-                        converted_value = converted_value
-                    elif register in ["126","130","142","144","146","148","162","166","178","180","182","184"]:
-                        converted_value /= int(extra)
-                    else:
-                        converted_value = converted_value
+                    if device == "inverter":
+                        if register == "64":
+                            converted_value = operating_state.get(converted_value, 'Unknown')
+                        elif register == "122":
+                            converted_value = inverter_status.get(converted_value, 'Unknown')
+                        elif register in ["120","132","154","170","172"]:
+                            converted_value = converted_value
+                        elif register in ["126","130","142","144","146","148","162","166","178","180","182","184"]:
+                            converted_value /= int(extra)
+                        else:
+                            converted_value = converted_value
 
-                if device == "cc":
-                    if register == "64":
-                        converted_value = operating_state.get(converted_value, 'Unknown')
-                    elif register == "73":
-                        converted_value = cc_status.get(converted_value, 'Unknown')
-                    elif register == "68":
-                        converted_value = "Has Active Faults" if converted_value == 1 else "No Active Faults"
-                    elif register == "69":
-                        converted_value = "Has Active Warnings" if converted_value == 1 else "No Active Warnings"
-                    elif register in ["76","78","88","90"]:
-                        converted_value /= int(extra)
-                    elif register in ["80","92"]:
-                        converted_value = converted_value
-                    elif register == "249":
-                        converted_value = solar_association.get(converted_value, 'Unknown')
-                    else:
-                        converted_value = converted_value
+                    if device == "cc":
+                        if register == "64":
+                            converted_value = operating_state.get(converted_value, 'Unknown')
+                        elif register == "73":
+                            converted_value = cc_status.get(converted_value, 'Unknown')
+                        elif register == "68":
+                            converted_value = "Has Active Faults" if converted_value == 1 else "No Active Faults"
+                        elif register == "69":
+                            converted_value = "Has Active Warnings" if converted_value == 1 else "No Active Warnings"
+                        elif register in ["76","78","88","90"]:
+                            converted_value /= int(extra)
+                        elif register in ["80","92"]:
+                            converted_value = converted_value
+                        elif register == "249":
+                            converted_value = solar_association.get(converted_value, 'Unknown')
+                        else:
+                            converted_value = converted_value
 
                         return_data[device_key][register_name] = converted_value if converted_value is not None else None
             except Exception as e:
