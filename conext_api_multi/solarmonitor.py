@@ -84,28 +84,34 @@ solar_association = {
     # Add more
 }
 
-# Load config.json with type check and conversion for HA dict schemas
+# Load config.json with type check and conversion for HA list schemas
 config_path = '/app/config.json'
 gateways = {}
-gateways_config = {}
 if os.path.exists(config_path):
     with open(config_path, 'r') as f:
         try:
             gateways_config = json.load(f)
             logger.info(f"Raw config content: {json.dumps(gateways_config)}")  # Log raw for debugging
             logger.info(f"Config loaded as type: {type(gateways_config)}")  # Log type
-            if not isinstance(gateways_config, dict):
-                logger.error("Config is not a dict; forcing to empty dict")
-                gateways_config = {}
+            if isinstance(gateways_config, dict):
+                # Handle HA's indexed dict for lists (e.g., {'0': gw1, '1': gw2})
+                logger.info("Config is dict; converting to list of values")
+                gateways_config = [gateways_config[k] for k in sorted(gateways_config.keys(), key=int) if k.isdigit() and isinstance(gateways_config[k], dict)]
+            elif not isinstance(gateways_config, list):
+                logger.error("Config is not a list or dict; forcing to empty list")
+                gateways_config = []
+            # Filter to only dict items in list
+            gateways_config = [gw for gw in gateways_config if isinstance(gw, dict)]
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
-            gateways_config = {}
+            gateways_config = []
 else:
-    gateways_config = {}  # Fallback
+    gateways_config = []  # Fallback
 
-# Build gateways dict from keys
-for name, gw in gateways_config.items():
+# Build gateways dict with skipping invalid
+for idx, gw in enumerate(gateways_config):
     try:
+        name = gw['name']
         device_ids = {
             'battery': {d['name']: d['unit_id'] for d in gw.get('batteries', []) if isinstance(d, dict)},
             'inverter': {d['name']: d['unit_id'] for d in gw.get('inverters', []) if isinstance(d, dict)},
@@ -118,13 +124,13 @@ for name, gw in gateways_config.items():
             'device_ids': device_ids
         }
     except KeyError as e:
-        logger.error(f"Missing key in gateway '{name}': {str(e)} - skipping this gateway")
+        logger.error(f"Missing key in gateway config at index {idx}: {str(e)} - skipping this gateway")
     except TypeError as e:
-        logger.error(f"Type error in gateway '{name}': {str(e)} - skipping")
+        logger.error(f"Type error in gateway config at index {idx} (likely non-dict gw): {str(e)} - skipping")
 if not gateways:
     logger.warning("No valid gateways configured")
 
-# Updated get_modbus_values with error handling (unchanged from before)
+# Updated get_modbus_values with error handling
 def get_modbus_values(gateway, device, device_instance=None):
     if gateway not in gateways:
         return {'error': 'Gateway not found'}
@@ -246,22 +252,4 @@ class Inverter(Resource):
 class CC(Resource):
     def get(self, gateway, instance=None):
         data = get_modbus_values(gateway, "cc", instance)
-        if 'error' in data:
-            return jsonify(data), 404 if data['error'] == 'Gateway not found' else 502
-        return data
-
-    def put(self, gateway, instance):
-        return {"command": "received for gateway: {} instance: {}".format(gateway, instance)}
-
-class Index(Resource):
-    def get(self):
-        return {"message": "Solar monitor API", "gateways": list(gateways.keys())}
-
-# Updated routes with <gateway>
-api.add_resource(Battery, "/<string:gateway>/battery", "/<string:gateway>/battery/<string:instance>")
-api.add_resource(Inverter, "/<string:gateway>/inverter", "/<string:gateway>/inverter/<string:instance>")
-api.add_resource(CC, "/<string:gateway>/cc", "/<string:gateway>/cc/<string:instance>")
-api.add_resource(Index, "/")
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=False)
+        if '
