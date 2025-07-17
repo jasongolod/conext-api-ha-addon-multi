@@ -2,9 +2,9 @@
 
 echo "Starting run.sh - Generating config.json"
 # Try UI config
-if bashio::config.exists 'gateways'; then
+if bashio::config.exists 'config'; then
     echo "UI config exists"
-    bashio::config 'gateways' > /app/raw_config.json 2>/app/config_error.log || {
+    bashio::config 'config' > /app/raw_config.json 2>/app/config_error.log || {
         echo "Error fetching bashio config, see /app/config_error.log"
         cat /app/config_error.log
         echo "Using hardcoded fallback config"
