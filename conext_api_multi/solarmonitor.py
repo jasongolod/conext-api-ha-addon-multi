@@ -175,7 +175,7 @@ def get_modbus_values(gateway, device, device_instance=None):
                         if a > 0:
                             hex_string = hex(a)[2:]
                             if hex_string.endswith("00"):
-                                hex_string = hex_string[:len(hex_string) - 2]
+                                hex_string = hex_string[:len(hex_string) - 2)
                             bytes_object = bytes.fromhex(hex_string)
                             string_chars += bytes_object.decode("ASCII")
                     converted_value = string_chars
@@ -223,7 +223,7 @@ def get_modbus_values(gateway, device, device_instance=None):
                     else:
                         converted_value = converted_value
 
-                return_data[device_key][register_name] = converted_value if converted_value is not None else None
+                        return_data[device_key][register_name] = converted_value if converted_value is not None else None
             except Exception as e:
                 logger.error(f"Error querying {gateway}/{device}/{device_key}/{register_name}: {str(e)}")
                 return_data[device_key][register_name] = {"error": str(e)}  # Return error message instead of crashing
@@ -247,7 +247,7 @@ class Inverter(Resource):
         return data
 
     def put(self, gateway, instance):
-        return {"command": "received for gateway: {} instance: {}".format(gateway, instance)}
+        return {"command": "received for gateway: {gateway} instance: {instance}"}
 
 class CC(Resource):
     def get(self, gateway, instance=None):
@@ -257,7 +257,7 @@ class CC(Resource):
         return data
 
     def put(self, gateway, instance):
-        return {"command": "received for gateway: {} instance: {}".format(gateway, instance)}
+        return {"command": "received for gateway: {gateway} instance: {instance}"}
 
 class Index(Resource):
     def get(self):
