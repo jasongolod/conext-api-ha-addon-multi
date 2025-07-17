@@ -84,16 +84,20 @@ solar_association = {
     # Add more
 }
 
-# Load config.json with type check and logging
+# Load config.json with type check and conversion for HA list schemas
 config_path = '/app/config.json'
 if os.path.exists(config_path):
     with open(config_path, 'r') as f:
         try:
             gateways_config = json.load(f)
             logger.info(f"Config loaded as type: {type(gateways_config)}")  # Log type for debugging
-            if not isinstance(gateways_config, list):
-                logger.error("Config is not a list; forcing to list for handling")
-                gateways_config = [gateways_config] if isinstance(gateways_config, dict) else []
+            if isinstance(gateways_config, dict):
+                # Handle HA's possible indexed dict for lists (e.g., {'0': gw1, '1': gw2})
+                logger.info("Config is dict; converting to list of values")
+                gateways_config = list(gateways_config.values())
+            elif not isinstance(gateways_config, list):
+                logger.error("Config is not a list or dict; forcing to empty list")
+                gateways_config = []
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
             gateways_config = []
@@ -118,6 +122,8 @@ for gw in gateways_config:
         }
     except KeyError as e:
         logger.error(f"Missing key in gateway config: {str(e)} - skipping this gateway")
+    except TypeError as e:
+        logger.error(f"Type error in gateway config (likely non-dict gw): {str(e)} - skipping")
 if not gateways:
     logger.warning("No valid gateways configured")
 
