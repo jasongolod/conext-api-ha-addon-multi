@@ -1,10 +1,10 @@
 #!/usr/bin/with-contenv bashio
 
-# Generate config.json from options
+# Generate config.json from add-on options
 bashio::config 'gateways' | jq > /app/config.json
 
 # Start NGINX
 nginx
 
-# Start the app
+# Start the Flask app
 python3 /app/solarmonitor.py
