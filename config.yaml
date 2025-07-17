@@ -1,0 +1,47 @@
+name: Conext API Multi
+description: Modbus TCP API for querying multiple Schneider Conext Gateways and devices.
+version: "1.2.0"
+slug: "conext_api_multi"
+url: "https://github.com/yourusername/conext-api-ha-addon-multi"
+startup: services
+init: false
+arch:
+  - amd64
+  - aarch64
+  - armv7
+  - armhf
+  - i386
+ports:
+  80/tcp: null  # Set in UI to expose, e.g., 8080
+ports_description:
+  80/tcp: "API web server port"
+options:
+  gateways:
+    - name: "gateway1"
+      ip: "192.168.1.100"
+      port: 503
+      timeout: 5
+      batteries:
+        - name: "BatMon-21"
+          unit_id: 190
+      inverters:
+        - name: "XW6848-21"
+          unit_id: 10
+      charge_controllers:
+        - name: "MPPT60-21"
+          unit_id: 50
+schema:
+  gateways: list
+    name: str
+    ip: str
+    port: "int?"
+    timeout: "int?"
+    batteries: list?
+      name: str
+      unit_id: int
+    inverters: list?
+      name: str
+      unit_id: int
+    charge_controllers: list?
+      name: str
+      unit_id: int
