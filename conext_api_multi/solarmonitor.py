@@ -16,10 +16,16 @@ logger = logging.getLogger(__name__)
 # Hardcoded global configs
 registers_data = {
     'battery': {
-        'voltage': '70,2,1000',
-        'temperature': '74,1,-273',
-        'soc': '76,1,1',
-        'soh': '88,1,1'
+        'voltage': '70,2,1000',  # uint32 /1000 = V
+        'temperature': '74,1,-273',  # *0.01 + extra (C)
+        'soc': '76,1,1',  # %
+        'soh': '88,1,1'   # %
+    },
+    'powermeter': {
+        'power': '1251,2,0.1',  # int32, scale 0.1, W
+        'voltage': '1271,1,0.1',  # uint16, scale 0.1, V
+        'current': '1281,2,0.1',  # int32, scale 0.1, A
+        'energy': '1301,4,0.001'  # int64, scale 0.001, kWh
     },
     'inverter': {
         'state': '64,1,0',
@@ -154,6 +160,7 @@ for idx, gw in enumerate(gateways_config):
         name = gw['name']
         device_ids = {
             'battery': {d['name']: d['unit_id'] for d in gw.get('batteries', []) if isinstance(d, dict)},
+            'powermeter': {d['name']: d['unit_id'] for d in gw.get('powermeter', []) if isinstance(d, dict)},
             'inverter': {d['name']: d['unit_id'] for d in gw.get('inverters', []) if isinstance(d, dict)},
             'cc': {d['name']: d['unit_id'] for d in gw.get('charge_controllers', []) if isinstance(d, dict)},
             'ags': {d['name']: d['unit_id'] for d in gw.get('ags', []) if isinstance(d, dict)},
@@ -217,6 +224,8 @@ def get_modbus_values(gateway, device, device_instance=None):
                         converted_value = hold_reg_arr[0]
                     else:
                         converted_value = hold_reg_arr[1]
+                elif reg_len == 4:
+                    converted_value = (hold_reg_arr[0] << 48) + (hold_reg_arr[1] << 32) + (hold_reg_arr[2] << 16) + hold_reg_arr[3]
                 elif reg_len == 8:
                     string_chars = ""
                     for a in hold_reg_arr:
@@ -239,6 +248,9 @@ def get_modbus_values(gateway, device, device_instance=None):
                         converted_value = converted_value
                     else:
                         converted_value = converted_value
+
+                if device == "powermeter":
+                    converted_value *= extra  # Scale for power, voltage, current, energy
 
                 if device == "inverter":
                     if register == 64:
@@ -313,6 +325,11 @@ class Battery(Resource):
         data = get_modbus_values(gateway, "battery", instance)
         return data, 200 if data else ({"error": "No data returned"}, 404)
 
+class PowerMeter(Resource):
+    def get(self, gateway, instance=None):
+        data = get_modbus_values(gateway, "powermeter", instance)
+        return data, 200 if data else ({"error": "No data returned"}, 404)
+
 class Inverter(Resource):
     def get(self, gateway, instance=None):
         data = get_modbus_values(gateway, "inverter", instance)
@@ -360,6 +377,7 @@ class Index(Resource):
 
 # Updated routes
 api.add_resource(Battery, "/<string:gateway>/battery", "/<string:gateway>/battery/<string:instance>")
+api.add_resource(PowerMeter, "/<string:gateway>/powermeter", "/<string:gateway>/powermeter/<string:instance>")
 api.add_resource(Inverter, "/<string:gateway>/inverter", "/<string:gateway>/inverter/<string:instance>")
 api.add_resource(CC, "/<string:gateway>/cc", "/<string:gateway>/cc/<string:instance>")
 api.add_resource(AGS, "/<string:gateway>/ags", "/<string:gateway>/ags/<string:instance>")
