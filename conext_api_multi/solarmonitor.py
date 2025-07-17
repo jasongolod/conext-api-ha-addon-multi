@@ -209,7 +209,7 @@ def get_modbus_values(gateway, device, device_instance=None):
             extra = float(register_data_values[2])
 
             try:
-                cxt = ModbusClient(host=host, port=port, auto_open=True, auto_close=True, debug=False, unit_id=devices[device_key], timeout=timeout)
+                cxt = ModbusClient(host=host, port=port, auto_open=True, auto_close=True, unit_id=devices[device_key], timeout=timeout)
                 hold_reg_arr = cxt.read_holding_registers(register, reg_len)
 
                 if hold_reg_arr is None:
