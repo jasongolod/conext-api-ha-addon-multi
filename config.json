@@ -1,0 +1,17 @@
+[
+  {
+    "name": "gateway1",
+    "ip": "192.168.10.106",
+    "port": 503,
+    "timeout": 5,
+    "batteries": [
+      {"name": "BatMon-21", "unit_id": 190}
+    ],
+    "inverters": [
+      {"name": "XW6848-21", "unit_id": 10}
+    ],
+    "charge_controllers": [
+      {"name": "MPPT60-21", "unit_id": 50}
+    ]
+  }
+]

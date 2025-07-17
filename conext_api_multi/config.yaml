@@ -2,7 +2,7 @@ name: Conext API Multi
 description: Modbus TCP API for querying multiple Schneider Conext Gateways and devices.
 version: "1.2.0"
 slug: "conext_api_multi"
-url: "https://github.com/yourusername/conext-api-ha-addon-multi"
+url: "https://github.com/jasongolod/conext-api-ha-addon-multi"
 startup: services
 init: false
 arch:
@@ -18,7 +18,7 @@ ports_description:
 options:
   gateways:
     - name: "gateway1"
-      ip: "192.168.1.100"
+      ip: "192.168.10.106"
       port: 503
       timeout: 5
       batteries:
