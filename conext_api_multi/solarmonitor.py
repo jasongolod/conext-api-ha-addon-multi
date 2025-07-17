@@ -260,8 +260,9 @@ class CC(Resource):
         return {"command": "received for gateway: {} instance: {}".format(gateway, instance)}
 
 class Index(Resource):
-    def get(self):
-        return {"message": "Solar monitor API", "gateways": list(gateways.keys())}
+  def get(self):
+    logger.info("Root endpoint accessed")
+    return {"message": "Solar monitor API", "gateways": list(gateways.keys())}
 
 # Updated routes with <gateway>
 api.add_resource(Battery, "/<string:gateway>/battery", "/<string:gateway>/battery/<string:instance>")
