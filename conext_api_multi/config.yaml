@@ -31,17 +31,4 @@ options:
         - name: "MPPT60-21"
           unit_id: 50
 schema:
-  gateways:
-    - name: str
-      ip: str
-      port: int?
-      timeout: int?
-      batteries:
-        - name: str
-          unit_id: int
-      inverters:
-        - name: str
-          unit_id: int
-      charge_controllers:
-        - name: str
-          unit_id: int
+  gateways: list(object)?
