@@ -9,27 +9,27 @@ import logging
 app = Flask(__name__)
 api = Api(app)
 
-# Setup logging (outputs to console/HA logs)
+# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Hardcoded global configs (from typical Conext Modbus maps; update with official docs)
+# Hardcoded global configs
 registers_data = {
     'battery': {
-        'voltage': '70,2,1000',  # uint32 /1000 = V
-        'temperature': '74,1,-273',  # *0.01 + extra (C)
-        'soc': '76,1,1',  # %
-        'soh': '88,1,1'   # %
+        'voltage': '70,2,1000',
+        'temperature': '74,1,-273',
+        'soc': '76,1,1',
+        'soh': '88,1,1'
     },
     'inverter': {
-        'state': '64,1,0',  # Lookup operating_state
-        'enabled': '66,1,0',  # 1=enabled
-        'faults': '68,1,0',   # 1=has faults
-        'warnings': '69,1,0', # 1=has warnings
-        'status': '122,1,0',  # Lookup inverter_status
-        'load': '120,1,0',    # W
-        'ac_in_volts': '126,1,10',  # /10 = V
-        'ac_in_freq': '130,1,10',   # /10 = Hz
+        'state': '64,1,0',
+        'enabled': '66,1,0',
+        'faults': '68,1,0',
+        'warnings': '69,1,0',
+        'status': '122,1,0',
+        'load': '120,1,0',
+        'ac_in_volts': '126,1,10',
+        'ac_in_freq': '130,1,10',
         'ac_out_volts': '142,1,10',
         'ac_out_freq': '146,1,10',
         'battery_volts': '154,1,10',
@@ -38,14 +38,14 @@ registers_data = {
         'state': '64,1,0',
         'faults': '68,1,0',
         'warnings': '69,1,0',
-        'status': '73,1,0',  # Lookup cc_status
+        'status': '73,1,0',
         'pv_volts': '76,1,10',
         'pv_amps': '78,1,10',
         'battery_volts': '80,1,10',
-        'output_power': '88,1,10',  # /10 = W?
+        'output_power': '88,1,10',
         'daily_kwh': '90,1,10',
         'aux_status': '92,1,0',
-        'association': '249,1,0'  # Lookup solar_association
+        'association': '249,1,0'
     }
 }
 
@@ -76,7 +76,7 @@ solar_association = {
     2: 'Solar 2',
 }
 
-# Load config.json with type check
+# Load config.json
 config_path = '/app/config.json'
 gateways = {}
 gateways_config = []
@@ -87,13 +87,11 @@ if os.path.exists(config_path):
             logger.info(f"Raw config content: {gateways_config}")
             logger.info(f"Config loaded as type: {type(gateways_config)}")
             if isinstance(gateways_config, dict):
-                logger.info("Config is dict; converting to list of values")
+                logger.info("Config is dict; converting to list")
                 gateways_config = [gateways_config[k] for k in sorted(gateways_config.keys(), key=int) if k.isdigit() and isinstance(gateways_config[k], dict)]
             elif not isinstance(gateways_config, list):
                 logger.error(f"Config is unexpected type {type(gateways_config)}; forcing to empty list")
                 gateways_config = []
-            # Filter to only dict items in list
-            gateways_config = [gw for gw in gateways_config if isinstance(gw, dict)]
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
             gateways_config = []
