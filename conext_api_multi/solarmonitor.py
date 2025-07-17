@@ -185,7 +185,7 @@ else:
 def get_modbus_values(gateway, device, device_instance=None):
     logger.info(f"Querying {gateway}/{device}/{device_instance}")
     if gateway not in gateways:
-        return {'error': f'Gateway {gateway} not found'}
+        return {'error': f'Gateway {gateway} not found'}, 404
     gw_config = gateways[gateway]
     host = gw_config['ip']
     port = gw_config['port']
@@ -195,7 +195,7 @@ def get_modbus_values(gateway, device, device_instance=None):
     return_data = {}
 
     if not devices:
-        return {'error': f'No {device} devices configured for gateway {gateway}'}
+        return {'error': f'No {device} devices configured for gateway {gateway}'}, 404
 
     for device_key in devices:
         if device_instance and device_instance != device_key:
@@ -318,54 +318,47 @@ def get_modbus_values(gateway, device, device_instance=None):
                 return_data[device_key][register_name] = {"error": str(e)}
             sleep(0.1)
     
-    return return_data
+    return return_data, 200 if return_data else ({'error': 'No data returned'}, 404)
 
 class Battery(Resource):
     def get(self, gateway, instance=None):
-        data = get_modbus_values(gateway, "battery", instance)
-        return data, 200 if data else ({"error": "No data returned"}, 404)
+        return get_modbus_values(gateway, "battery", instance)
 
 class PowerMeter(Resource):
     def get(self, gateway, instance=None):
-        data = get_modbus_values(gateway, "powermeter", instance)
-        return data, 200 if data else ({"error": "No data returned"}, 404)
+        return get_modbus_values(gateway, "powermeter", instance)
 
 class Inverter(Resource):
     def get(self, gateway, instance=None):
-        data = get_modbus_values(gateway, "inverter", instance)
-        return data, 200 if data else ({"error": "No data returned"}, 404)
+        return get_modbus_values(gateway, "inverter", instance)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
 class CC(Resource):
     def get(self, gateway, instance=None):
-        data = get_modbus_values(gateway, "cc", instance)
-        return data, 200 if data else ({"error": "No data returned"}, 404)
+        return get_modbus_values(gateway, "cc", instance)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
 class AGS(Resource):
     def get(self, gateway, instance=None):
-        data = get_modbus_values(gateway, "ags", instance)
-        return data, 200 if data else ({"error": "No data returned"}, 404)
+        return get_modbus_values(gateway, "ags", instance)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
 class SCP(Resource):
     def get(self, gateway, instance=None):
-        data = get_modbus_values(gateway, "scp", instance)
-        return data, 200 if data else ({"error": "No data returned"}, 404)
+        return get_modbus_values(gateway, "scp", instance)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
 class GridTie(Resource):
     def get(self, gateway, instance=None):
-        data = get_modbus_values(gateway, "gridtie", instance)
-        return data, 200 if data else ({"error": "No data returned"}, 404)
+        return get_modbus_values(gateway, "gridtie", instance)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
