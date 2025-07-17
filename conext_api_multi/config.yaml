@@ -24,3 +24,5 @@ options:
       batteries: []
       inverters: []
       charge_controllers: []
+schema:
+  gateways: list(object)?
