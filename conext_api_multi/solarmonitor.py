@@ -78,7 +78,6 @@ solar_association = {
 
 # Load config.json
 config_path = '/app/config.json'
-gateways = {}
 gateways_config = []
 if os.path.exists(config_path):
     with open(config_path, 'r') as f:
@@ -86,7 +85,6 @@ if os.path.exists(config_path):
             raw_config = json.load(f)
             logger.info(f"Raw config content: {raw_config}")
             logger.info(f"Config loaded as type: {type(raw_config)}")
-            # Handle string config from UI
             if isinstance(raw_config, str):
                 try:
                     gateways_config = json.loads(raw_config)
@@ -112,6 +110,7 @@ else:
     gateways_config = []
 
 # Build gateways dict
+gateways = {}  # Initialize after loading config
 for idx, gw in enumerate(gateways_config):
     try:
         name = gw['name']
