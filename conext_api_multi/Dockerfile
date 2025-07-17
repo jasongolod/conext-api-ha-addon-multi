@@ -1,7 +1,7 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-RUN apk update && apk add --no-cache python3 py3-pip nginx py3-requests py3-yaml \
+RUN apk update && apk add --no-cache python3 py3-pip nginx py3-requests py3-yaml jq \
     && pip3 install --no-cache-dir --break-system-packages pyModbusTCP flask flask-restful \
     && rm -rf /var/cache/apk/*
 
