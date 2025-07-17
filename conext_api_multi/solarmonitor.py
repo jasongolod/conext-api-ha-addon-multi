@@ -252,4 +252,22 @@ class Inverter(Resource):
 class CC(Resource):
     def get(self, gateway, instance=None):
         data = get_modbus_values(gateway, "cc", instance)
-        if '
+        if 'error' in data:
+            return jsonify(data), 404 if data['error'] == 'Gateway not found' else 502
+        return data
+
+    def put(self, gateway, instance):
+        return {"command": "received for gateway: {} instance: {}".format(gateway, instance)}
+
+class Index(Resource):
+    def get(self):
+        return {"message": "Solar monitor API", "gateways": list(gateways.keys())}
+
+# Updated routes with <gateway>
+api.add_resource(Battery, "/<string:gateway>/battery", "/<string:gateway>/battery/<string:instance>")
+api.add_resource(Inverter, "/<string:gateway>/inverter", "/<string:gateway>/inverter/<string:instance>")
+api.add_resource(CC, "/<string:gateway>/cc", "/<string:gateway>/cc/<string:instance>")
+api.add_resource(Index, "/")
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=5000, debug=False)
