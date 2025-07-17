@@ -83,14 +83,23 @@ gateways_config = []
 if os.path.exists(config_path):
     with open(config_path, 'r') as f:
         try:
-            gateways_config = json.load(f)
-            logger.info(f"Raw config content: {gateways_config}")
-            logger.info(f"Config loaded as type: {type(gateways_config)}")
-            if isinstance(gateways_config, dict):
+            raw_config = json.load(f)
+            logger.info(f"Raw config content: {raw_config}")
+            logger.info(f"Config loaded as type: {type(raw_config)}")
+            # Handle string config from UI
+            if isinstance(raw_config, str):
+                try:
+                    gateways_config = json.loads(raw_config)
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON decode error in string config: {str(e)}")
+                    gateways_config = []
+            elif isinstance(raw_config, dict):
                 logger.info("Config is dict; converting to list")
-                gateways_config = [gateways_config[k] for k in sorted(gateways_config.keys(), key=int) if k.isdigit() and isinstance(gateways_config[k], dict)]
-            elif not isinstance(gateways_config, list):
-                logger.error(f"Config is unexpected type {type(gateways_config)}; forcing to empty list")
+                gateways_config = [raw_config[k] for k in sorted(raw_config.keys(), key=int) if k.isdigit() and isinstance(raw_config[k], dict)]
+            elif isinstance(raw_config, list):
+                gateways_config = raw_config
+            else:
+                logger.error(f"Config is unexpected type {type(raw_config)}; forcing to empty list")
                 gateways_config = []
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
