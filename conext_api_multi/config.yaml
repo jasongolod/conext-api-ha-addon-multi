@@ -12,23 +12,10 @@ arch:
   - armhf
   - i386
 ports:
-  80/tcp: 8080  # Default mapping to 8080 on host (implicit, no null)
+  80/tcp: null  # Set in UI to expose, e.g., 8080
 ports_description:
   80/tcp: "API web server port"
 options:
-  gateways:
-    - name: "gateway1"
-      ip: "192.168.10.106"
-      port: 503
-      timeout: 5
-      batteries:
-        - name: "BatMon-21"
-          unit_id: 190
-      inverters:
-        - name: "XW6848-21"
-          unit_id: 10
-      charge_controllers:
-        - name: "MPPT60-21"
-          unit_id: 50
+  gateways: {}
 schema:
-  gateways: list(object)?
+  gateways: object?
