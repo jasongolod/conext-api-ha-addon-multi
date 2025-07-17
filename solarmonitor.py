@@ -4,9 +4,14 @@ from pyModbusTCP.client import ModbusClient
 from time import sleep
 import json
 import os
+import logging  # For error logging
 
 app = Flask(__name__)
 api = Api(app)
+
+# Setup logging (outputs to console/HA logs)
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 # Hardcoded global configs (from typical Conext Modbus maps; update with official docs)
 registers_data = {
@@ -79,31 +84,44 @@ solar_association = {
     # Add more
 }
 
-# Load config.json (gateways list from HA)
+# Load config.json with type check and logging
 config_path = '/app/config.json'
 if os.path.exists(config_path):
     with open(config_path, 'r') as f:
-        gateways_config = json.load(f)
+        try:
+            gateways_config = json.load(f)
+            logger.info(f"Config loaded as type: {type(gateways_config)}")  # Log type for debugging
+            if not isinstance(gateways_config, list):
+                logger.error("Config is not a list; forcing to list for handling")
+                gateways_config = [gateways_config] if isinstance(gateways_config, dict) else []
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {str(e)}")
+            gateways_config = []
 else:
-    gateways_config = []  # Fallback empty
+    gateways_config = []  # Fallback
 
-# Build gateways dict {name: {'ip':, 'port':, 'timeout':, 'device_ids': {'battery': {'name': unit_id, ...}, ...}}}
+# Build gateways dict with skipping invalid
 gateways = {}
 for gw in gateways_config:
-    name = gw['name']
-    device_ids = {
-        'battery': {d['name']: d['unit_id'] for d in gw.get('batteries', [])},
-        'inverter': {d['name']: d['unit_id'] for d in gw.get('inverters', [])},
-        'cc': {d['name']: d['unit_id'] for d in gw.get('charge_controllers', [])},
-    }
-    gateways[name] = {
-        'ip': gw['ip'],
-        'port': gw.get('port', 503),
-        'timeout': gw.get('timeout', 5),
-        'device_ids': device_ids
-    }
+    try:
+        name = gw['name']
+        device_ids = {
+            'battery': {d['name']: d['unit_id'] for d in gw.get('batteries', [])},
+            'inverter': {d['name']: d['unit_id'] for d in gw.get('inverters', [])},
+            'cc': {d['name']: d['unit_id'] for d in gw.get('charge_controllers', [])},
+        }
+        gateways[name] = {
+            'ip': gw['ip'],
+            'port': gw.get('port', 503),
+            'timeout': gw.get('timeout', 5),
+            'device_ids': device_ids
+        }
+    except KeyError as e:
+        logger.error(f"Missing key in gateway config: {str(e)} - skipping this gateway")
+if not gateways:
+    logger.warning("No valid gateways configured")
 
-# Updated get_modbus_values
+# Updated get_modbus_values with error handling
 def get_modbus_values(gateway, device, device_instance=None):
     if gateway not in gateways:
         return {'error': 'Gateway not found'}
@@ -126,11 +144,13 @@ def get_modbus_values(gateway, device, device_instance=None):
             reg_len = register_data_values[1]
             extra = register_data_values[2]
 
-            cxt = ModbusClient(host=host, port=port, auto_open=True, auto_close=True, debug=False, unit_id=devices[device_key], timeout=timeout)
-            hold_reg_arr = cxt.read_holding_registers(int(register), int(reg_len))
+            try:
+                cxt = ModbusClient(host=host, port=port, auto_open=True, auto_close=True, debug=False, unit_id=devices[device_key], timeout=timeout)
+                hold_reg_arr = cxt.read_holding_registers(int(register), int(reg_len))
 
-            if hold_reg_arr:
-                # Parsing logic unchanged from original
+                if hold_reg_arr is None:
+                    raise ValueError("No data returned from register")
+                
                 if int(reg_len) == 2:
                     if hold_reg_arr[0] == 65535:
                         converted_value = hold_reg_arr[1] - hold_reg_arr[0]
@@ -195,27 +215,37 @@ def get_modbus_values(gateway, device, device_instance=None):
                         converted_value = converted_value
 
                 return_data[device_key][register_name] = converted_value if converted_value is not None else None
-            else:
-                return_data[device_key][register_name] = None
+            except Exception as e:
+                logger.error(f"Error querying {gateway}/{device}/{device_key}/{register_name}: {str(e)}")
+                return_data[device_key][register_name] = {"error": str(e)}  # Return error message instead of crashing
             sleep(0.1)
     
     return return_data
 
-# Updated Resources with gateway param
+# Updated Resources with status codes
 class Battery(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "battery", instance)
+        data = get_modbus_values(gateway, "battery", instance)
+        if 'error' in data:
+            return jsonify(data), 404 if data['error'] == 'Gateway not found' else 502
+        return data
 
 class Inverter(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "inverter", instance)
+        data = get_modbus_values(gateway, "inverter", instance)
+        if 'error' in data:
+            return jsonify(data), 404 if data['error'] == 'Gateway not found' else 502
+        return data
 
     def put(self, gateway, instance):
         return {"command": "received for gateway: {} instance: {}".format(gateway, instance)}
 
 class CC(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "cc", instance)
+        data = get_modbus_values(gateway, "cc", instance)
+        if 'error' in data:
+            return jsonify(data), 404 if data['error'] == 'Gateway not found' else 502
+        return data
 
     def put(self, gateway, instance):
         return {"command": "received for gateway: {} instance: {}".format(gateway, instance)}
