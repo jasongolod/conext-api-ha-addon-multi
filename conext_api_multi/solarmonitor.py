@@ -10,7 +10,7 @@ app = Flask(__name__)
 api = Api(app)
 
 # Setup logging (outputs to console/HA logs)
-logging.basicBasic(level=logging.INFO)  # Change to INFO for more details
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Hardcoded global configs (from typical Conext Modbus maps; update with official docs)
@@ -86,6 +86,8 @@ solar_association = {
 
 # Load config.json with type check and conversion for HA list schemas
 config_path = '/app/config.json'
+gateways = {}
+gateways_config = []
 if os.path.exists(config_path):
     with open(config_path, 'r') as f:
         try:
@@ -104,11 +106,11 @@ if os.path.exists(config_path):
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
             gateways_config = []
-else:
+except Exception as e:
+    logger.error(f"Error loading config.json: {str(e)}")
     gateways_config = []  # Fallback
 
 # Build gateways dict with skipping invalid
-gateways = {}
 for idx, gw in enumerate(gateways_config):
     try:
         name = gw['name']
@@ -260,19 +262,14 @@ class CC(Resource):
         return {"command": "received for gateway: {} instance: {}".format(gateway, instance)}
 
 class Index(Resource):
-  def get(self):
-    logger.info("Root endpoint accessed")
-    return {"message": "Solar monitor API", "gateways": list(gateways.keys())}
+    def get(self):
+        return {"message": "Solar monitor API", "gateways": list(gateways.keys())}
 
 # Updated routes with <gateway>
 api.add_resource(Battery, "/<string:gateway>/battery", "/<string:gateway>/battery/<string:instance>")
-logger.info("Battery route loaded")
 api.add_resource(Inverter, "/<string:gateway>/inverter", "/<string:gateway>/inverter/<string:instance>")
-logger.info("Inverter route loaded")
 api.add_resource(CC, "/<string:gateway>/cc", "/<string:gateway>/cc/<string:instance>")
-logger.info("CC route loaded")
 api.add_resource(Index, "/")
-logger.info("Index route loaded")
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=False)
