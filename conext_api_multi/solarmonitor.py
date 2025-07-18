@@ -159,123 +159,127 @@ gateways = {}
 failed_devices = {}
 
 # Load config.json
-config_path = '/app/config.json'
-gateways_config = []
-if os.path.exists(config_path):
-    with open(config_path, 'r') as f:
-        try:
-            raw_config = json.load(f)
-            logger.info(f"Raw config content: {raw_config}")
-            logger.info(f"Config loaded as type: {type(raw_config)}")
-            if isinstance(raw_config, str):
-                try:
-                    gateways_config = json.loads(raw_config)
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON decode error in string config: {str(e)}")
-                    gateways_config = []
-            elif isinstance(raw_config, dict):
-                logger.info("Config is dict; converting to list")
-                gateways_config = [raw_config[k] for k in sorted(raw_config.keys(), key=int) if k.isdigit() and isinstance(raw_config[k], dict)]
-            elif isinstance(raw_config, list):
-                gateways_config = raw_config
-            else:
-                logger.error(f"Config is unexpected type {type(raw_config)}; forcing to empty list")
-                gateways_config = []
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {str(e)}")
-            gateways_config = []
-        except Exception as e:
-            logger.error(f"Unexpected error loading config: {str(e)}")
-            gateways_config = []
-else:
-    logger.warning("Config file not found; using empty list")
+def load_config():
+    global gateways
+    config_path = '/app/config.json'
     gateways_config = []
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
+            try:
+                raw_config = json.load(f)
+                logger.info(f"Raw config content: {raw_config}")
+                logger.info(f"Config loaded as type: {type(raw_config)}")
+                if isinstance(raw_config, str):
+                    try:
+                        gateways_config = json.loads(raw_config)
+                    except json.JSONDecodeError as e:
+                        logger.error(f"JSON decode error in string config: {str(e)}")
+                        gateways_config = []
+                elif isinstance(raw_config, dict):
+                    logger.info("Config is dict; converting to list")
+                    gateways_config = [raw_config[k] for k in sorted(raw_config.keys(), key=int) if k.isdigit() and isinstance(raw_config[k], dict)]
+                elif isinstance(raw_config, list):
+                    gateways_config = raw_config
+                else:
+                    logger.error(f"Config is unexpected type {type(raw_config)}; forcing to empty list")
+                    gateways_config = []
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error: {str(e)}")
+                gateways_config = []
+            except Exception as e:
+                logger.error(f"Unexpected error loading config: {str(e)}")
+                gateways_config = []
+    else:
+        logger.warning("Config file not found; using empty list")
+        gateways_config = []
 
-# Build gateways dict and publish MQTT discovery
-for idx, gw in enumerate(gateways_config):
-    try:
-        name = gw['name']
-        device_ids = {
-            'battery': {d['name']: d['unit_id'] for d in gw.get('batteries', []) if isinstance(d, dict)},
-            'powermeter': {d['name']: d['unit_id'] for d in gw.get('powermeter', []) if isinstance(d, dict)},
-            'inverter': {d['name']: d['unit_id'] for d in gw.get('inverters', []) if isinstance(d, dict)},
-            'cc': {d['name']: d['unit_id'] for d in gw.get('charge_controllers', []) if isinstance(d, dict)},
-            'ags': {d['name']: d['unit_id'] for d in gw.get('ags', []) if isinstance(d, dict)},
-            'scp': {d['name']: d['unit_id'] for d in gw.get('scp', []) if isinstance(d, dict)},
-            'gridtie': {d['name']: d['unit_id'] for d in gw.get('gridtie', []) if isinstance(d, dict)}
-        }
-        gateways[name] = {
-            'ip': gw['ip'],
-            'port': gw.get('port', 503),
-            'timeout': gw.get('timeout', 5),
-            'device_ids': device_ids
-        }
-        
-        # Publish MQTT discovery for each device
-        for device_type, devices in device_ids.items():
-            for device_name, unit_id in devices.items():
-                device_id = f"{name}_{device_name}"
-                device_config = {
-                    "name": device_name,
-                    "identifiers": [device_id],
-                    "manufacturer": "Schneider Electric",
-                    "model": device_type.capitalize(),
-                    "via_device": name
-                }
-                for register_name in registers_data[device_type]:
-                    entity_id = f"sensor.{device_id}_{register_name}"
-                    topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{device_id}/{register_name}/config"
-                    unit = ""
-                    if device_type == "battery":
-                        if register_name == "voltage" or register_name == "battery_volts":
-                            unit = "V"
-                        elif register_name == "temperature":
-                            unit = "°C"
-                        elif register_name in ["soc", "soh"]:
-                            unit = "%"
-                    elif device_type == "powermeter":
-                        if register_name == "power":
-                            unit = "W"
-                        elif register_name == "voltage":
-                            unit = "V"
-                        elif register_name == "current":
-                            unit = "A"
-                        elif register_name == "energy":
-                            unit = "kWh"
-                    elif device_type == "inverter":
-                        if register_name in ["ac_in_volts", "ac_out_volts", "battery_volts"]:
-                            unit = "V"
-                        elif register_name in ["ac_in_freq", "ac_out_freq"]:
-                            unit = "Hz"
-                        elif register_name == "load":
-                            unit = "W"
-                    elif device_type == "cc":
-                        if register_name in ["pv_volts", "battery_volts"]:
-                            unit = "V"
-                        elif register_name == "pv_amps":
-                            unit = "A"
-                        elif register_name in ["output_power", "daily_kwh"]:
-                            unit = "W" if register_name == "output_power" else "kWh"
-                    config = {
-                        "name": f"{device_name} {register_name.replace('_', ' ').title()}",
-                        "state_topic": f"conext/{name}/{device_type}/{device_name}/{register_name}",
-                        "unique_id": entity_id,
-                        "device": device_config,
-                        "unit_of_measurement": unit,
-                        "value_template": "{{ value_json.value }}"
+    # Build gateways dict and publish MQTT discovery
+    for idx, gw in enumerate(gateways_config):
+        try:
+            name = gw['name']
+            device_ids = {
+                'battery': {d['name']: d['unit_id'] for d in gw.get('batteries', []) if isinstance(d, dict)},
+                'powermeter': {d['name']: d['unit_id'] for d in gw.get('powermeter', []) if isinstance(d, dict)},
+                'inverter': {d['name']: d['unit_id'] for d in gw.get('inverters', []) if isinstance(d, dict)},
+                'cc': {d['name']: d['unit_id'] for d in gw.get('charge_controllers', []) if isinstance(d, dict)},
+                'ags': {d['name']: d['unit_id'] for d in gw.get('ags', []) if isinstance(d, dict)},
+                'scp': {d['name']: d['unit_id'] for d in gw.get('scp', []) if isinstance(d, dict)},
+                'gridtie': {d['name']: d['unit_id'] for d in gw.get('gridtie', []) if isinstance(d, dict)}
+            }
+            gateways[name] = {
+                'ip': gw['ip'],
+                'port': gw.get('port', 503),
+                'timeout': gw.get('timeout', 5),
+                'device_ids': device_ids
+            }
+            
+            # Publish MQTT discovery for each device
+            for device_type, devices in device_ids.items():
+                for device_name, unit_id in devices.items():
+                    device_id = f"{name}_{device_name}"
+                    device_config = {
+                        "name": device_name,
+                        "identifiers": [device_id],
+                        "manufacturer": "Schneider Electric",
+                        "model": device_type.capitalize(),
+                        "via_device": name
                     }
-                    mqtt_client.publish(topic, json.dumps(config), retain=True)
-    except KeyError as e:
-        logger.error(f"Missing key in gateway config at index {idx}: {str(e)}")
-        return {"error": f"Missing key in gateway config: {str(e)}"}, 500
-    except TypeError as e:
-        logger.error(f"Type error in gateway config at index {idx}: {str(e)}")
-        return {"error": f"Type error in gateway config: {str(e)}"}, 500
-if not gateways:
-    logger.warning("No valid gateways configured")
-    return {"error": "No valid gateways configured"}, 500
-else:
-    logger.info(f"Loaded gateways: {list(gateways.keys())}")
+                    for register_name in registers_data[device_type]:
+                        entity_id = f"sensor.{device_id}_{register_name}"
+                        topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{device_id}/{register_name}/config"
+                        unit = ""
+                        if device_type == "battery":
+                            if register_name == "voltage" or register_name == "battery_volts":
+                                unit = "V"
+                            elif register_name == "temperature":
+                                unit = "°C"
+                            elif register_name in ["soc", "soh"]:
+                                unit = "%"
+                        elif device_type == "powermeter":
+                            if register_name == "power":
+                                unit = "W"
+                            elif register_name == "voltage":
+                                unit = "V"
+                            elif register_name == "current":
+                                unit = "A"
+                            elif register_name == "energy":
+                                unit = "kWh"
+                        elif device_type == "inverter":
+                            if register_name in ["ac_in_volts", "ac_out_volts", "battery_volts"]:
+                                unit = "V"
+                            elif register_name in ["ac_in_freq", "ac_out_freq"]:
+                                unit = "Hz"
+                            elif register_name == "load":
+                                unit = "W"
+                        elif device_type == "cc":
+                            if register_name in ["pv_volts", "battery_volts"]:
+                                unit = "V"
+                            elif register_name == "pv_amps":
+                                unit = "A"
+                            elif register_name in ["output_power", "daily_kwh"]:
+                                unit = "W" if register_name == "output_power" else "kWh"
+                        config = {
+                            "name": f"{device_name} {register_name.replace('_', ' ').title()}",
+                            "state_topic": f"conext/{name}/{device_type}/{device_name}/{register_name}",
+                            "unique_id": entity_id,
+                            "device": device_config,
+                            "unit_of_measurement": unit,
+                            "value_template": "{{ value_json.value }}"
+                        }
+                        mqtt_client.publish(topic, json.dumps(config), retain=True)
+        except KeyError as e:
+            logger.error(f"Missing key in gateway config at index {idx}: {str(e)}")
+            continue
+        except TypeError as e:
+            logger.error(f"Type error in gateway config at index {idx}: {str(e)}")
+            continue
+    if not gateways:
+        logger.warning("No valid gateways configured")
+    else:
+        logger.info(f"Loaded gateways: {list(gateways.keys())}")
+
+# Load configuration at startup
+load_config()
 
 def get_modbus_values(gateway, device, device_instance=None):
     logger.info(f"Querying {gateway}/{device}/{device_instance}")
