@@ -1,6 +1,12 @@
 #!/usr/bin/with-contenv bashio
 
 echo "Starting run.sh - Generating config.json"
+# Set MQTT environment variables
+export MQTT_BROKER=$(bashio::config 'mqtt_broker')
+export MQTT_PORT=$(bashio::config 'mqtt_port')
+export MQTT_USERNAME=$(bashio::config 'mqtt_username')
+export MQTT_PASSWORD=$(bashio::config 'mqtt_password')
+
 # Try UI config
 if bashio::config.exists 'config'; then
     echo "UI config exists"
@@ -8,18 +14,18 @@ if bashio::config.exists 'config'; then
         echo "Error fetching bashio config, see /app/config_error.log"
         cat /app/config_error.log
         echo "Using hardcoded fallback config"
-        echo '[{"name": "Insight_Facility_1", "ip": "192.168.10.106", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}]' > /app/config.json
+        echo '[{"name": "Insight_Facility_1", "ip": "192.168.10.106", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}, {"name": "Insight_Facility_2", "ip": "192.168.10.107", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}]' > /app/config.json
     }
     echo "Raw UI config content:"
     cat /app/raw_config.json
 else
     echo "No UI config found; using hardcoded fallback config"
-    echo '[{"name": "Insight_Facility_1", "ip": "192.168.10.106", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}]' > /app/config.json
+    echo '[{"name": "Insight_Facility_1", "ip": "192.168.10.106", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}, {"name": "Insight_Facility_2", "ip": "192.168.10.107", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}]' > /app/config.json
 fi
 jq '. // []' /app/raw_config.json > /app/config_processed.json 2>/app/jq_error.log || {
     echo "Error processing config with jq, see /app/jq_error.log"
     cat /app/jq_error.log
-    echo '[{"name": "Insight_Facility_1", "ip": "192.168.10.106", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}]' > /app/config_processed.json
+    echo '[{"name": "Insight_Facility_1", "ip": "192.168.10.106", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}, {"name": "Insight_Facility_2", "ip": "192.168.10.107", "port": 503, "timeout": 5, "batteries": [], "powermeter": [], "inverters": [], "charge_controllers": [], "ags": [], "scp": [], "gridtie": []}]' > /app/config_processed.json
 }
 mv /app/config_processed.json /app/config.json
 echo "Final /app/config.json content:"
