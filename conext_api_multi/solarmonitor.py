@@ -1,10 +1,12 @@
 from flask import Flask, jsonify
 from flask_restful import Api, Resource
 from pyModbusTCP.client import ModbusClient
+import paho.mqtt.client as mqtt
 from time import sleep
 import json
 import os
 import logging
+import threading
 
 app = Flask(__name__)
 api = Api(app)
@@ -12,6 +14,20 @@ api = Api(app)
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# MQTT configuration
+MQTT_BROKER = os.getenv('MQTT_BROKER', 'core-mosquitto')
+MQTT_PORT = int(os.getenv('MQTT_PORT', 1883))
+MQTT_USERNAME = os.getenv('MQTT_USERNAME', '')
+MQTT_PASSWORD = os.getenv('MQTT_PASSWORD', '')
+MQTT_DISCOVERY_PREFIX = 'homeassistant'
+
+# MQTT client
+mqtt_client = mqtt.Client()
+if MQTT_USERNAME and MQTT_PASSWORD:
+    mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+mqtt_client.connect(MQTT_BROKER, MQTT_PORT)
+mqtt_client.loop_start()
 
 # Hardcoded global configs
 registers_data = {
@@ -154,7 +170,7 @@ else:
     logger.warning("Config file not found; using empty list")
     gateways_config = []
 
-# Build gateways dict
+# Build gateways dict and publish MQTT discovery
 for idx, gw in enumerate(gateways_config):
     try:
         name = gw['name']
@@ -173,6 +189,61 @@ for idx, gw in enumerate(gateways_config):
             'timeout': gw.get('timeout', 5),
             'device_ids': device_ids
         }
+        
+        # Publish MQTT discovery for each device
+        for device_type, devices in device_ids.items():
+            for device_name, unit_id in devices.items():
+                device_id = f"{name}_{device_name}"
+                device_config = {
+                    "name": device_name,
+                    "identifiers": [device_id],
+                    "manufacturer": "Schneider Electric",
+                    "model": device_type.capitalize(),
+                    "via_device": name
+                }
+                for register_name in registers_data[device_type]:
+                    entity_id = f"sensor.{device_id}_{register_name}"
+                    topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{device_id}/{register_name}/config"
+                    unit = ""
+                    if device_type == "battery":
+                        if register_name == "voltage" or register_name == "battery_volts":
+                            unit = "V"
+                        elif register_name == "temperature":
+                            unit = "°C"
+                        elif register_name in ["soc", "soh"]:
+                            unit = "%"
+                    elif device_type == "powermeter":
+                        if register_name == "power":
+                            unit = "W"
+                        elif register_name == "voltage":
+                            unit = "V"
+                        elif register_name == "current":
+                            unit = "A"
+                        elif register_name == "energy":
+                            unit = "kWh"
+                    elif device_type == "inverter":
+                        if register_name in ["ac_in_volts", "ac_out_volts", "battery_volts"]:
+                            unit = "V"
+                        elif register_name in ["ac_in_freq", "ac_out_freq"]:
+                            unit = "Hz"
+                        elif register_name == "load":
+                            unit = "W"
+                    elif device_type == "cc":
+                        if register_name in ["pv_volts", "battery_volts"]:
+                            unit = "V"
+                        elif register_name == "pv_amps":
+                            unit = "A"
+                        elif register_name in ["output_power", "daily_kwh"]:
+                            unit = "W" if register_name == "output_power" else "kWh"
+                    config = {
+                        "name": f"{device_name} {register_name.replace('_', ' ').title()}",
+                        "state_topic": f"conext/{name}/{device_type}/{device_name}/{register_name}",
+                        "unique_id": entity_id,
+                        "device": device_config,
+                        "unit_of_measurement": unit,
+                        "value_template": "{{ value_json.value }}"
+                    }
+                    mqtt_client.publish(topic, json.dumps(config), retain=True)
     except KeyError as e:
         logger.error(f"Missing key in gateway config at index {idx}: {str(e)} - skipping")
     except TypeError as e:
@@ -210,10 +281,12 @@ def get_modbus_values(gateway, device, device_instance=None):
 
             try:
                 cxt = ModbusClient(host=host, port=port, auto_open=True, auto_close=True, unit_id=devices[device_key], timeout=timeout)
+                if not cxt.is_open:
+                    raise ValueError(f"Failed to connect to {host}:{port} with unit_id {devices[device_key]}")
                 hold_reg_arr = cxt.read_holding_registers(register, reg_len)
 
                 if hold_reg_arr is None:
-                    raise ValueError("No data returned from register")
+                    raise ValueError(f"No data returned from register {register} for {device_key}")
                 
                 if reg_len == 2:
                     if hold_reg_arr[0] == 65535:
@@ -313,9 +386,17 @@ def get_modbus_values(gateway, device, device_instance=None):
                         converted_value = converted_value
 
                 return_data[device_key][register_name] = converted_value
+                # Publish to MQTT
+                mqtt_topic = f"conext/{gateway}/{device}/{device_key}/{register_name}"
+                mqtt_payload = {"value": converted_value}
+                mqtt_client.publish(mqtt_topic, json.dumps(mqtt_payload))
             except Exception as e:
                 logger.error(f"Error querying {gateway}/{device}/{device_key}/{register_name}: {str(e)}")
                 return_data[device_key][register_name] = {"error": str(e)}
+                # Publish error to MQTT
+                mqtt_topic = f"conext/{gateway}/{device}/{device_key}/{register_name}"
+                mqtt_payload = {"value": str(e)}
+                mqtt_client.publish(mqtt_topic, json.dumps(mqtt_payload))
             sleep(0.1)
     
     return return_data, 200 if return_data else ({'error': 'No data returned'}, 404)
@@ -377,6 +458,17 @@ api.add_resource(AGS, "/<string:gateway>/ags", "/<string:gateway>/ags/<string:in
 api.add_resource(SCP, "/<string:gateway>/scp", "/<string:gateway>/scp/<string:instance>")
 api.add_resource(GridTie, "/<string:gateway>/gridtie", "/<string:gateway>/gridtie/<string:instance>")
 api.add_resource(Index, "/")
+
+# Background thread to periodically update MQTT
+def update_mqtt():
+    while True:
+        for gateway in gateways:
+            for device_type in gateways[gateway]['device_ids']:
+                for device_name in gateways[gateway]['device_ids'][device_type]:
+                    get_modbus_values(gateway, device_type, device_name)
+        sleep(10)  # Update every 10 seconds
+
+threading.Thread(target=update_mqtt, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=False)
