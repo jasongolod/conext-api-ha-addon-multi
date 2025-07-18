@@ -22,12 +22,30 @@ MQTT_USERNAME = os.getenv('MQTT_USERNAME', '')
 MQTT_PASSWORD = os.getenv('MQTT_PASSWORD', '')
 MQTT_DISCOVERY_PREFIX = 'homeassistant'
 
-# MQTT client
-mqtt_client = mqtt.Client()
+# MQTT client with MQTTv5
+mqtt_client = mqtt.Client(protocol=mqtt.MQTTv5)
 if MQTT_USERNAME and MQTT_PASSWORD:
     mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
-mqtt_client.connect(MQTT_BROKER, MQTT_PORT)
-mqtt_client.loop_start()
+
+def on_connect(client, userdata, flags, rc, properties=None):
+    if rc == 0:
+        logger.info("Connected to MQTT broker")
+    else:
+        logger.error(f"Failed to connect to MQTT broker, return code {rc}")
+
+mqtt_client.on_connect = on_connect
+
+# Reconnect logic
+def connect_mqtt():
+    try:
+        mqtt_client.connect(MQTT_BROKER, MQTT_PORT)
+        mqtt_client.loop_start()
+    except Exception as e:
+        logger.error(f"Failed to connect to MQTT broker: {str(e)}")
+        sleep(5)
+        connect_mqtt()
+
+threading.Thread(target=connect_mqtt, daemon=True).start()
 
 # Hardcoded global configs
 registers_data = {
@@ -137,6 +155,9 @@ gridtie_status = {
 # Global gateways dict
 gateways = {}
 
+# Track failed devices to avoid repeated queries
+failed_devices = {}
+
 # Load config.json
 config_path = '/app/config.json'
 gateways_config = []
@@ -166,9 +187,6 @@ if os.path.exists(config_path):
         except Exception as e:
             logger.error(f"Unexpected error loading config: {str(e)}")
             gateways_config = []
-else:
-    logger.warning("Config file not found; using empty list")
-    gateways_config = []
 
 # Build gateways dict and publish MQTT discovery
 for idx, gw in enumerate(gateways_config):
@@ -269,206 +287,4 @@ def get_modbus_values(gateway, device, device_instance=None):
         return {'error': f'No {device} devices configured for gateway {gateway}'}, 404
 
     for device_key in devices:
-        if device_instance and device_instance != device_key:
-            continue
-        
-        return_data[device_key] = {}
-        for register_name in register_data:
-            register_data_values = register_data[register_name].split(',')
-            register = int(register_data_values[0])
-            reg_len = int(register_data_values[1])
-            extra = float(register_data_values[2])
-
-            try:
-                cxt = ModbusClient(host=host, port=port, auto_open=True, auto_close=True, unit_id=devices[device_key], timeout=timeout)
-                if not cxt.is_open:
-                    raise ValueError(f"Failed to connect to {host}:{port} with unit_id {devices[device_key]}")
-                hold_reg_arr = cxt.read_holding_registers(register, reg_len)
-
-                if hold_reg_arr is None:
-                    raise ValueError(f"No data returned from register {register} for {device_key}")
-                
-                if reg_len == 2:
-                    if hold_reg_arr[0] == 65535:
-                        converted_value = hold_reg_arr[1] - hold_reg_arr[0]
-                    elif hold_reg_arr[0] > 0 and hold_reg_arr[0] < 50:
-                        converted_value = hold_reg_arr[0] * 65536 + hold_reg_arr[1]
-                    elif register in [130, 166]:
-                        converted_value = hold_reg_arr[0]
-                    else:
-                        converted_value = hold_reg_arr[1]
-                elif reg_len == 4:
-                    converted_value = (hold_reg_arr[0] << 48) + (hold_reg_arr[1] << 32) + (hold_reg_arr[2] << 16) + hold_reg_arr[3]
-                elif reg_len == 8:
-                    string_chars = ""
-                    for a in hold_reg_arr:
-                        if a > 0:
-                            hex_string = hex(a)[2:]
-                            if hex_string.endswith("00"):
-                                hex_string = hex_string[:len(hex_string) - 2]
-                            bytes_object = bytes.fromhex(hex_string)
-                            string_chars += bytes_object.decode("ASCII")
-                    converted_value = string_chars
-                else:
-                    converted_value = hold_reg_arr[0]
-
-                if device == "battery":
-                    if register == 70:
-                        converted_value /= extra
-                    elif register == 74:
-                        converted_value = converted_value * 0.01 + extra
-                    elif register in [76, 88]:
-                        converted_value = converted_value
-                    else:
-                        converted_value = converted_value
-
-                if device == "powermeter":
-                    converted_value *= extra  # Scale for power, voltage, current, energy
-
-                if device == "inverter":
-                    if register == 64:
-                        converted_value = operating_state.get(converted_value, 'Unknown')
-                    elif register == 122:
-                        converted_value = inverter_status.get(converted_value, 'Unknown')
-                    elif register in [120, 132, 154, 170, 172]:
-                        converted_value = converted_value
-                    elif register in [126, 130, 142, 144, 146, 148, 162, 166, 178, 180, 182, 184]:
-                        converted_value /= extra
-                    else:
-                        converted_value = converted_value
-
-                if device == "cc":
-                    if register == 64:
-                        converted_value = operating_state.get(converted_value, 'Unknown')
-                    elif register == 73:
-                        converted_value = cc_status.get(converted_value, 'Unknown')
-                    elif register == 68:
-                        converted_value = "Has Active Faults" if converted_value == 1 else "No Active Faults"
-                    elif register == 69:
-                        converted_value = "Has Active Warnings" if converted_value == 1 else "No Active Warnings"
-                    elif register in [76, 78, 88, 90]:
-                        converted_value /= extra
-                    elif register in [80, 92]:
-                        converted_value = converted_value
-                    elif register == 249:
-                        converted_value = solar_association.get(converted_value, 'Unknown')
-                    else:
-                        converted_value = converted_value
-
-                if device == "ags":
-                    if register == 64:
-                        converted_value = operating_state.get(converted_value, 'Unknown')
-                    elif register == 70:
-                        converted_value = ags_state.get(converted_value, 'Unknown')
-                    elif register in [68, 69, 72]:
-                        converted_value = converted_value
-                    else:
-                        converted_value = converted_value
-
-                if device == "scp":
-                    if register == 64:
-                        converted_value = operating_state.get(converted_value, 'Unknown')
-                    elif register == 70:
-                        converted_value = scp_status.get(converted_value, 'Unknown')
-                    elif register in [68, 69]:
-                        converted_value = converted_value
-                    else:
-                        converted_value = converted_value
-
-                if device == "gridtie":
-                    if register == 64:
-                        converted_value = operating_state.get(converted_value, 'Unknown')
-                    elif register in [76, 88]:
-                        converted_value /= extra
-                    elif register in [68, 69]:
-                        converted_value = converted_value
-                    else:
-                        converted_value = converted_value
-
-                return_data[device_key][register_name] = converted_value
-                # Publish to MQTT
-                mqtt_topic = f"conext/{gateway}/{device}/{device_key}/{register_name}"
-                mqtt_payload = {"value": converted_value}
-                mqtt_client.publish(mqtt_topic, json.dumps(mqtt_payload))
-            except Exception as e:
-                logger.error(f"Error querying {gateway}/{device}/{device_key}/{register_name}: {str(e)}")
-                return_data[device_key][register_name] = {"error": str(e)}
-                # Publish error to MQTT
-                mqtt_topic = f"conext/{gateway}/{device}/{device_key}/{register_name}"
-                mqtt_payload = {"value": str(e)}
-                mqtt_client.publish(mqtt_topic, json.dumps(mqtt_payload))
-            sleep(0.1)
-    
-    return return_data, 200 if return_data else ({'error': 'No data returned'}, 404)
-
-class Battery(Resource):
-    def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "battery", instance)
-
-class PowerMeter(Resource):
-    def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "powermeter", instance)
-
-class Inverter(Resource):
-    def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "inverter", instance)
-
-    def put(self, gateway, instance):
-        return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
-
-class CC(Resource):
-    def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "cc", instance)
-
-    def put(self, gateway, instance):
-        return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
-
-class AGS(Resource):
-    def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "ags", instance)
-
-    def put(self, gateway, instance):
-        return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
-
-class SCP(Resource):
-    def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "scp", instance)
-
-    def put(self, gateway, instance):
-        return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
-
-class GridTie(Resource):
-    def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "gridtie", instance)
-
-    def put(self, gateway, instance):
-        return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
-
-class Index(Resource):
-    def get(self):
-        logger.info(f"Root endpoint accessed, gateways: {list(gateways.keys())}")
-        return {"message": "Solar monitor API", "gateways": list(gateways.keys())}, 200
-
-# Updated routes
-api.add_resource(Battery, "/<string:gateway>/battery", "/<string:gateway>/battery/<string:instance>")
-api.add_resource(PowerMeter, "/<string:gateway>/powermeter", "/<string:gateway>/powermeter/<string:instance>")
-api.add_resource(Inverter, "/<string:gateway>/inverter", "/<string:gateway>/inverter/<string:instance>")
-api.add_resource(CC, "/<string:gateway>/cc", "/<string:gateway>/cc/<string:instance>")
-api.add_resource(AGS, "/<string:gateway>/ags", "/<string:gateway>/ags/<string:instance>")
-api.add_resource(SCP, "/<string:gateway>/scp", "/<string:gateway>/scp/<string:instance>")
-api.add_resource(GridTie, "/<string:gateway>/gridtie", "/<string:gateway>/gridtie/<string:instance>")
-api.add_resource(Index, "/")
-
-# Background thread to periodically update MQTT
-def update_mqtt():
-    while True:
-        for gateway in gateways:
-            for device_type in gateways[gateway]['device_ids']:
-                for device_name in gateways[gateway]['device_ids'][device_type]:
-                    get_modbus_values(gateway, device_type, device_name)
-        sleep(10)  # Update every 10 seconds
-
-threading.Thread(target=update_mqtt, daemon=True).start()
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=False)
+        if device_instance and device_instance
