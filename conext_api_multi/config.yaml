@@ -17,3 +17,13 @@ ports_description:
   80/tcp: "API web server port"
 options:
   config: ""
+  mqtt_broker: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+schema:
+  config: str
+  mqtt_broker: str
+  mqtt_port: int
+  mqtt_username: str?
+  mqtt_password: str?
