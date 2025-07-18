@@ -187,6 +187,9 @@ if os.path.exists(config_path):
         except Exception as e:
             logger.error(f"Unexpected error loading config: {str(e)}")
             gateways_config = []
+else:
+    logger.warning("Config file not found; using empty list")
+    gateways_config = []
 
 # Build gateways dict and publish MQTT discovery
 for idx, gw in enumerate(gateways_config):
@@ -263,11 +266,14 @@ for idx, gw in enumerate(gateways_config):
                     }
                     mqtt_client.publish(topic, json.dumps(config), retain=True)
     except KeyError as e:
-        logger.error(f"Missing key in gateway config at index {idx}: {str(e)} - skipping")
+        logger.error(f"Missing key in gateway config at index {idx}: {str(e)}")
+        return {"error": f"Missing key in gateway config: {str(e)}"}, 500
     except TypeError as e:
-        logger.error(f"Type error in gateway config at index {idx}: {str(e)} - skipping")
+        logger.error(f"Type error in gateway config at index {idx}: {str(e)}")
+        return {"error": f"Type error in gateway config: {str(e)}"}, 500
 if not gateways:
     logger.warning("No valid gateways configured")
+    return {"error": "No valid gateways configured"}, 500
 else:
     logger.info(f"Loaded gateways: {list(gateways.keys())}")
 
@@ -294,6 +300,7 @@ def get_modbus_values(gateway, device, device_instance=None):
         device_id = f"{gateway}_{device}_{device_key}"
         if device_id in failed_devices and failed_devices[device_id] >= 5:
             logger.debug(f"Skipping {device_id} due to repeated failures")
+            return_data[device_key] = {"error": f"Device {device_key} skipped due to repeated failures"}
             continue
 
         return_data[device_key] = {}
@@ -433,43 +440,50 @@ def get_modbus_values(gateway, device, device_instance=None):
 
 class Battery(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "battery", instance)
+        result = get_modbus_values(gateway, "battery", instance)
+        return result if isinstance(result, tuple) else (result, 500)
 
 class PowerMeter(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "powermeter", instance)
+        result = get_modbus_values(gateway, "powermeter", instance)
+        return result if isinstance(result, tuple) else (result, 500)
 
 class Inverter(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "inverter", instance)
+        result = get_modbus_values(gateway, "inverter", instance)
+        return result if isinstance(result, tuple) else (result, 500)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
 class CC(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "cc", instance)
+        result = get_modbus_values(gateway, "cc", instance)
+        return result if isinstance(result, tuple) else (result, 500)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
 class AGS(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "ags", instance)
+        result = get_modbus_values(gateway, "ags", instance)
+        return result if isinstance(result, tuple) else (result, 500)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
 class SCP(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "scp", instance)
+        result = get_modbus_values(gateway, "scp", instance)
+        return result if isinstance(result, tuple) else (result, 500)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
 
 class GridTie(Resource):
     def get(self, gateway, instance=None):
-        return get_modbus_values(gateway, "gridtie", instance)
+        result = get_modbus_values(gateway, "gridtie", instance)
+        return result if isinstance(result, tuple) else (result, 500)
 
     def put(self, gateway, instance):
         return {"command": f"received for gateway: {gateway} instance: {instance}"}, 200
